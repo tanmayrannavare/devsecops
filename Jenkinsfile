@@ -2,8 +2,8 @@ pipeline {
     agent any
 
     environment {
-        SONAR_URL = 'http://13.232.54.87:9000'      // SonarQube EC2 Public IP
-        SONAR_TOKEN = credentials('sonar-token')    // Jenkins credential ID for Sonar token
+        SONAR_URL = 'http://13.232.54.87:9000'       // SonarQube EC2 Public IP
+        SONAR_TOKEN = credentials('sonar-token')     // Jenkins credential ID for SonarQube
     }
 
     stages {
@@ -16,18 +16,10 @@ pipeline {
             }
         }
 
-        /* ========== 2️⃣ BUILD DOCKER IMAGE ========== */
-        stage('Build Docker Image') {
-            steps {
-                echo "🐳 Building Docker image..."
-                sh 'docker build -t webapp:latest .'
-            }
-        }
-
-        /* ========== 3️⃣ SAST - SONARQUBE ANALYSIS ========== */
+        /* ========== 2️⃣ SAST - SONARQUBE ANALYSIS ========== */
         stage('SAST - SonarQube Analysis') {
             steps {
-                echo "🔍 Running static code analysis with SonarQube..."
+                echo "🔍 Running static code analysis (SAST) using SonarQube..."
                 withSonarQubeEnv('SonarQube') {
                     withEnv(["PATH+SONAR=${tool 'SonarScanner'}/bin"]) {
                         sh '''
@@ -38,17 +30,29 @@ pipeline {
                                 -Dsonar.host.url=${SONAR_URL} \
                                 -Dsonar.login=${SONAR_TOKEN}
                         '''
+                        echo "✅ SAST Scan completed successfully and results sent to SonarQube dashboard."
                     }
                 }
+            }
+        }
+
+        /* ========== 3️⃣ BUILD DOCKER IMAGE ========== */
+        stage('Build Docker Image') {
+            steps {
+                echo "🐳 Building Docker image after successful SAST scan..."
+                sh '''
+                    docker build -t webapp:latest .
+                    echo "✅ Docker image 'webapp:latest' built successfully."
+                '''
             }
         }
 
         /* ========== 4️⃣ SCA - TRIVY IMAGE SCAN ========== */
         stage('SCA - Trivy Image Scan') {
             steps {
-                echo "🧰 Running Trivy container vulnerability scan..."
+                echo "🧰 Running Trivy image vulnerability scan (SCA)..."
                 sh '''
-                    echo "📄 Generating Trivy HTML Report..."
+                    echo "📄 Generating Trivy HTML report..."
                     trivy image --severity HIGH,CRITICAL \
                         --format template --template "@/usr/local/share/trivy/contrib/html.tpl" \
                         -o trivy-report.html webapp:latest || true
@@ -65,11 +69,12 @@ pipeline {
         /* ========== 5️⃣ DEPLOY APPLICATION ========== */
         stage('Deploy Application') {
             steps {
-                echo "🚀 Deploying web app container on Jenkins EC2..."
+                echo "🚀 Deploying verified Docker container to Jenkins EC2..."
                 sh '''
                     docker stop webapp || true
                     docker rm webapp || true
                     docker run -d -p 80:80 --name webapp webapp:latest
+                    echo "✅ Application deployed on port 80 successfully."
                 '''
             }
         }
@@ -77,13 +82,13 @@ pipeline {
         /* ========== 6️⃣ DAST - OWASP ZAP SCAN ========== */
         stage('DAST - OWASP ZAP Scan') {
             steps {
-                echo "🧪 Running OWASP ZAP Dynamic Security Scan..."
+                echo "🧪 Running OWASP ZAP Dynamic Application Security Test (DAST)..."
                 script {
                     def public_ip = sh(script: "curl -s http://checkip.amazonaws.com", returnStdout: true).trim()
                     echo "🌍 Detected Jenkins Public IP: ${public_ip}"
 
                     sh '''
-                        echo "📄 Generating ZAP HTML Report..."
+                        echo "📄 Generating OWASP ZAP HTML Report..."
                         docker run --rm --add-host=host.docker.internal:host-gateway \
                             -v $(pwd):/zap/wrk/ -t ghcr.io/zaproxy/zaproxy \
                             zap-baseline.py -t http://localhost:80 -r zap-report.html || true
@@ -103,11 +108,12 @@ pipeline {
     post {
         success {
             echo "✅ DevSecOps Pipeline executed successfully!"
-            echo "🌐 WebApp deployed on port 80."
-            echo "📊 Reports generated: trivy-report.html and zap-report.html"
+            echo "🌐 WebApp deployed on Jenkins EC2 (Port 80)."
+            echo "📊 Reports generated and archived: trivy-report.html, zap-report.html"
+            echo "📈 SonarQube dashboard updated at ${SONAR_URL}/dashboard?id=webapp"
         }
         failure {
-            echo "❌ Pipeline failed! Check logs and reports for details."
+            echo "❌ Pipeline failed! Check Jenkins logs and archived reports for details."
         }
     }
 }
