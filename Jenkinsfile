@@ -2,13 +2,16 @@ pipeline {
     agent any
 
     environment {
-        SONAR_URL = 'http://13.232.54.87:9000'    // SonarQube EC2 public IP
-        SONAR_TOKEN = credentials('sonar-token')  // Jenkins credential ID for Sonar token
-        APP_PORT = '80'                           // Application port
+        SONAR_URL = 'http://13.232.54.87:9000'      // SonarQube EC2 public IP
+        SONAR_TOKEN = credentials('sonar-token')    // Jenkins credential ID for Sonar token
+        APP_PORT = '80'                             // Application port
     }
 
     stages {
 
+        /* ============================
+           1️⃣ CHECKOUT CODE FROM GITHUB
+           ============================ */
         stage('Checkout Code') {
             steps {
                 echo "📥 Checking out source code from main branch..."
@@ -16,6 +19,9 @@ pipeline {
             }
         }
 
+        /* ============================
+           2️⃣ BUILD DOCKER IMAGE
+           ============================ */
         stage('Build Docker Image') {
             steps {
                 echo "🐳 Building Docker image..."
@@ -23,6 +29,9 @@ pipeline {
             }
         }
 
+        /* ============================
+           3️⃣ STATIC ANALYSIS (SAST)
+           ============================ */
         stage('SAST - SonarQube Analysis') {
             steps {
                 echo "🔍 Running static code analysis (SonarQube)..."
@@ -40,13 +49,17 @@ pipeline {
             }
         }
 
+        /* ============================
+           4️⃣ SOFTWARE COMPOSITION ANALYSIS (SCA)
+           ============================ */
         stage('SCA - Trivy Image Scan') {
             steps {
                 echo "🧰 Running Trivy container vulnerability scan..."
                 sh '''
                     echo "📄 Generating Trivy HTML Report..."
                     trivy image --severity HIGH,CRITICAL \
-                        --format html -o trivy-report.html webapp:latest || true
+                        --format template --template "@contrib/html.tpl" \
+                        -o trivy-report.html webapp:latest || true
                 '''
             }
             post {
@@ -57,6 +70,9 @@ pipeline {
             }
         }
 
+        /* ============================
+           5️⃣ DEPLOY APPLICATION
+           ============================ */
         stage('Deploy Application') {
             steps {
                 echo "🚀 Deploying containerized web app..."
@@ -68,6 +84,9 @@ pipeline {
             }
         }
 
+        /* ============================
+           6️⃣ DYNAMIC ANALYSIS (DAST)
+           ============================ */
         stage('DAST - OWASP ZAP Scan') {
             steps {
                 echo "🧪 Running OWASP ZAP Dynamic Security Scan..."
@@ -76,7 +95,7 @@ pipeline {
                     def public_ip = sh(script: "curl -s http://checkip.amazonaws.com", returnStdout: true).trim()
                     echo "🌍 Detected Jenkins Public IP: ${public_ip}"
 
-                    // Run OWASP ZAP and generate HTML report
+                    // Run OWASP ZAP scan and generate report
                     sh '''
                         echo "📄 Generating ZAP HTML Report..."
                         docker run --rm --add-host=host.docker.internal:host-gateway \
@@ -94,9 +113,13 @@ pipeline {
         }
     }
 
+    /* ============================
+       POST-BUILD ACTIONS
+       ============================ */
     post {
         success {
-            echo "✅ DevSecOps Pipeline executed successfully! WebApp deployed on port 80."
+            echo "✅ DevSecOps Pipeline executed successfully!"
+            echo "🌐 WebApp deployed on port 80."
             echo "📊 Reports generated: trivy-report.html and zap-report.html"
         }
         failure {
