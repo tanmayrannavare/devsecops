@@ -2,10 +2,9 @@ pipeline {
     agent any
 
     environment {
-        SONAR_URL = 'http://localhost:9000'
-        SONAR_TOKEN = credentials('sonar-token')   // Jenkins credential ID
-        SLACK_CHANNEL = '#devsecops-alerts'       // your Slack channel
-        APP_IP = 'http://192.168.56.120'          // your live app IP
+        SONAR_URL = 'http://<your-sonarqube-public-ip>:9000'  // Update this!
+        SONAR_TOKEN = credentials('sonar-token')               // Jenkins credential ID
+        APP_IP = 'http://<your-jenkins-public-ip>'             // or http://localhost if same machine
     }
 
     stages {
@@ -13,14 +12,14 @@ pipeline {
         stage('Checkout Code') {
             steps {
                 echo "📥 Checking out source code..."
-                git 'https://github.com/tanmayrannavare/devsecops.git'
+                git branch: 'main', url: 'https://github.com/tanmayrannavare/devsecops.git'
             }
         }
 
         stage('Build Docker Image') {
             steps {
                 echo "🐳 Building Docker image..."
-                sh 'docker build -t webapp:latest .'
+                sh "docker build -t webapp:latest ."
             }
         }
 
@@ -28,13 +27,13 @@ pipeline {
             steps {
                 echo "🔍 Running static analysis..."
                 withSonarQubeEnv('SonarQube') {
-                    sh '''
-                    sonar-scanner \
-                        -Dsonar.projectKey=webapp \
-                        -Dsonar.sources=. \
-                        -Dsonar.host.url=$SONAR_URL \
-                        -Dsonar.login=$SONAR_TOKEN
-                    '''
+                    sh """
+                        sonar-scanner \
+                            -Dsonar.projectKey=webapp \
+                            -Dsonar.sources=. \
+                            -Dsonar.host.url=${SONAR_URL} \
+                            -Dsonar.login=${SONAR_TOKEN}
+                    """
                 }
             }
         }
@@ -42,18 +41,18 @@ pipeline {
         stage('SCA - Trivy Image Scan') {
             steps {
                 echo "🧰 Scanning image for vulnerabilities..."
-                sh 'trivy image --exit-code 0 --severity HIGH,CRITICAL webapp:latest || true'
+                sh "trivy image --exit-code 0 --severity HIGH,CRITICAL webapp:latest || true"
             }
         }
 
         stage('DAST - OWASP ZAP Scan') {
             steps {
                 echo "🧪 Running OWASP ZAP security test..."
-                sh '''
-                docker run --rm --add-host=host.docker.internal:host-gateway \
-                    -v $(pwd):/zap/wrk/ -t ghcr.io/zaproxy/zaproxy \
-                    zap-baseline.py -t $APP_IP -r zap-report.html || true
-                '''
+                sh """
+                    docker run --rm --add-host=host.docker.internal:host-gateway \
+                        -v $(pwd):/zap/wrk/ -t ghcr.io/zaproxy/zaproxy \
+                        zap-baseline.py -t ${APP_IP} -r zap-report.html || true
+                """
             }
             post {
                 always {
@@ -65,11 +64,11 @@ pipeline {
         stage('Deploy Application') {
             steps {
                 echo "🚀 Deploying application container..."
-                sh '''
-                docker stop webapp || true
-                docker rm webapp || true
-                docker run -d -p 80:80 --name webapp webapp:latest
-                '''
+                sh """
+                    docker stop webapp || true
+                    docker rm webapp || true
+                    docker run -d -p 80:80 --name webapp webapp:latest
+                """
             }
         }
     }
@@ -77,11 +76,9 @@ pipeline {
     post {
         success {
             echo "✅ Pipeline succeeded!"
-            slackSend(channel: "${SLACK_CHANNEL}", message: "✅ DevSecOps Pipeline passed successfully for webapp.")
         }
         failure {
             echo "❌ Pipeline failed!"
-            slackSend(channel: "${SLACK_CHANNEL}", message: "❌ DevSecOps Pipeline failed for webapp. Check Jenkins logs.")
         }
     }
 }
