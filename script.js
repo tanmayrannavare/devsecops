@@ -13,7 +13,7 @@ const players = [
     },
     {
         id: 2,
-        name: "Virat Kohli",
+        name: "Virat bhai",
         role: "Batsman",
         roleClass: "role-batsman",
         image: "images/Kohli.jpg",
