@@ -13,7 +13,7 @@ pipeline {
         stage('Checkout Code') {
             steps {
                 echo "📥 Checking out source code..."
-                git 'https://github.com/<your-username>/<your-repo-name>.git'
+                git 'https://github.com/tanmayrannavare/devsecops.git'
             }
         }
 
@@ -28,13 +28,13 @@ pipeline {
             steps {
                 echo "🔍 Running static analysis..."
                 withSonarQubeEnv('SonarQube') {
-                    sh """
+                    sh '''
                     sonar-scanner \
                         -Dsonar.projectKey=webapp \
                         -Dsonar.sources=. \
                         -Dsonar.host.url=$SONAR_URL \
                         -Dsonar.login=$SONAR_TOKEN
-                    """
+                    '''
                 }
             }
         }
@@ -49,11 +49,11 @@ pipeline {
         stage('DAST - OWASP ZAP Scan') {
             steps {
                 echo "🧪 Running OWASP ZAP security test..."
-                sh """
+                sh '''
                 docker run --rm --add-host=host.docker.internal:host-gateway \
                     -v $(pwd):/zap/wrk/ -t ghcr.io/zaproxy/zaproxy \
                     zap-baseline.py -t $APP_IP -r zap-report.html || true
-                """
+                '''
             }
             post {
                 always {
