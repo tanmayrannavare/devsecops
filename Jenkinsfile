@@ -107,4 +107,7 @@ pipeline {
             echo "📊 Reports generated: trivy-report.html and zap-report.html"
         }
         failure {
-            echo "❌ Pipeline failed! Check logs and reports for details
+            echo "❌ Pipeline failed! Check logs and reports for details."
+        }
+    }
+}
