@@ -2,9 +2,9 @@ pipeline {
     agent any
 
     environment {
-        SONAR_URL = 'http://13.232.54.87:9000'  // replace with your SonarQube EC2 public IP
-        SONAR_TOKEN = credentials('sonar-token')              // Jenkins credential ID for Sonar token
-        APP_IP = 'http://13.126.142.41'         // replace with your app’s running IP
+        SONAR_URL = 'http://13.232.54.87:9000'       // SonarQube EC2 public IP
+        SONAR_TOKEN = credentials('sonar-token')      // Jenkins credential ID for Sonar token
+        APP_IP = 'http://13.126.142.41'               // Deployed app's public IP
     }
 
     stages {
@@ -32,6 +32,7 @@ pipeline {
                             sonar-scanner \
                                 -Dsonar.projectKey=webapp \
                                 -Dsonar.sources=. \
+                                -Dsonar.exclusions=**/zap-report.html,**/*.zip,**/*.log,**/node_modules/**,**/images/** \
                                 -Dsonar.host.url=$SONAR_URL \
                                 -Dsonar.login=$SONAR_TOKEN
                         '''
