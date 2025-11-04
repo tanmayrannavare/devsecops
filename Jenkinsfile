@@ -2,16 +2,16 @@ pipeline {
     agent any
 
     environment {
-        SONAR_URL = 'http://13.232.54.87:9000'
-        SONAR_TOKEN = credentials('sonar-token')
-        APP_PORT = '80'
+        SONAR_URL = 'http://13.232.54.87:9000'    // your SonarQube EC2 public IP
+        SONAR_TOKEN = credentials('sonar-token')  // Jenkins credential ID for Sonar token
+        APP_PORT = '80'                           // application port
     }
 
     stages {
 
         stage('Checkout Code') {
             steps {
-                echo "📥 Checking out source code..."
+                echo "📥 Checking out source code from main branch..."
                 git branch: 'main', url: 'https://github.com/tanmayrannavare/devsecops.git'
             }
         }
@@ -20,6 +20,32 @@ pipeline {
             steps {
                 echo "🐳 Building Docker image..."
                 sh 'docker build -t webapp:latest .'
+            }
+        }
+
+        stage('SAST - SonarQube Analysis') {
+            steps {
+                echo "🔍 Running static code analysis (SonarQube)..."
+                withSonarQubeEnv('SonarQube') {
+                    withEnv(["PATH+SONAR=${tool 'SonarScanner'}/bin"]) {
+                        sh '''
+                            sonar-scanner \
+                                -Dsonar.projectKey=webapp \
+                                -Dsonar.sources=. \
+                                -Dsonar.host.url=${SONAR_URL} \
+                                -Dsonar.login=${SONAR_TOKEN}
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('SCA - Trivy Image Scan') {
+            steps {
+                echo "🧰 Running Trivy container vulnerability scan..."
+                sh '''
+                    trivy image --exit-code 0 --severity HIGH,CRITICAL webapp:latest || true
+                '''
             }
         }
 
@@ -36,17 +62,18 @@ pipeline {
 
         stage('DAST - OWASP ZAP Scan') {
             steps {
-                echo "🧪 Running OWASP ZAP DAST scan..."
+                echo "🧪 Running OWASP ZAP Dynamic Security Scan..."
                 script {
-                    // Dynamically fetch the public IP of the Jenkins EC2 instance
+                    // Dynamically fetch public IP of Jenkins EC2 instance
                     def public_ip = sh(script: "curl -s http://checkip.amazonaws.com", returnStdout: true).trim()
                     echo "🌍 Detected Jenkins Public IP: ${public_ip}"
 
-                    sh """
+                    // Run OWASP ZAP scan safely (use triple single quotes to avoid Groovy $ issues)
+                    sh '''
                         docker run --rm --add-host=host.docker.internal:host-gateway \
                             -v $(pwd):/zap/wrk/ -t ghcr.io/zaproxy/zaproxy \
-                            zap-baseline.py -t http://${public_ip}:${APP_PORT} -r zap-report.html || true
-                    """
+                            zap-baseline.py -t http://localhost:80 -r zap-report.html || true
+                    '''
                 }
             }
             post {
@@ -59,7 +86,7 @@ pipeline {
 
     post {
         success {
-            echo "✅ DevSecOps Pipeline executed successfully!"
+            echo "✅ DevSecOps Pipeline executed successfully! WebApp deployed on port 80."
         }
         failure {
             echo "❌ Pipeline failed! Check logs in Jenkins console."
