@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        SONAR_URL = 'http://15.207.246.187:9000'  // replace with your SonarQube EC2 public IP
+        SONAR_URL = 'http://13.232.54.87:9000'  // replace with your SonarQube EC2 public IP
         SONAR_TOKEN = credentials('sonar-token')              // Jenkins credential ID for Sonar token
         APP_IP = 'http://http://13.126.142.41'         // replace with your app’s running IP
     }
