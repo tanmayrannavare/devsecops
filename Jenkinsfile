@@ -2,17 +2,17 @@ pipeline {
     agent any
 
     environment {
-        SONAR_URL = 'http://<your-sonarqube-public-ip>:9000'  // change to your Sonar EC2 public IP
+        SONAR_URL = 'http://<your-sonarqube-public-ip>:9000'  // replace with your SonarQube EC2 public IP
         SONAR_TOKEN = credentials('sonar-token')              // Jenkins credential ID for Sonar token
-        APP_IP = 'http://<your-app-ip-or-VM2-private-IP>'     // where your app will run
+        APP_IP = 'http://<your-app-ip-or-private-ip>'         // replace with your app’s running IP
     }
 
     stages {
 
         stage('Checkout Code') {
             steps {
-                echo "📥 Checking out source code..."
-                git 'https://github.com/tanmayrannavare/devsecops.git'
+                echo "📥 Checking out source code from main branch..."
+                git branch: 'main', url: 'https://github.com/tanmayrannavare/devsecops.git'
             }
         }
 
@@ -25,7 +25,7 @@ pipeline {
 
         stage('SAST - SonarQube Analysis') {
             steps {
-                echo "🔍 Running static code analysis..."
+                echo "🔍 Running static code analysis (SonarQube)..."
                 withSonarQubeEnv('SonarQube') {
                     withEnv(["PATH+SONAR=${tool 'SonarScanner'}/bin"]) {
                         sh '''
@@ -43,7 +43,9 @@ pipeline {
         stage('SCA - Trivy Image Scan') {
             steps {
                 echo "🧰 Running Trivy container scan..."
-                sh 'trivy image --exit-code 0 --severity HIGH,CRITICAL webapp:latest || true'
+                sh '''
+                    trivy image --exit-code 0 --severity HIGH,CRITICAL webapp:latest || true
+                '''
             }
         }
 
@@ -80,7 +82,7 @@ pipeline {
             echo "✅ DevSecOps Pipeline executed successfully!"
         }
         failure {
-            echo "❌ Pipeline failed! Please check logs in Jenkins console."
+            echo "❌ Pipeline failed! Check logs in Jenkins console."
         }
     }
 }
