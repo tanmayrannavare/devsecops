@@ -2,9 +2,9 @@ pipeline {
     agent any
 
     environment {
-        SONAR_URL = 'http://<your-sonarqube-public-ip>:9000'
-        SONAR_TOKEN = credentials('sonar-token')
-        APP_IP = 'http://<your-jenkins-public-ip>'
+        SONAR_URL = 'http://<your-sonarqube-public-ip>:9000'  // change to your Sonar EC2 public IP
+        SONAR_TOKEN = credentials('sonar-token')              // Jenkins credential ID for Sonar token
+        APP_IP = 'http://<your-app-ip-or-VM2-private-IP>'     // where your app will run
     }
 
     stages {
@@ -12,7 +12,7 @@ pipeline {
         stage('Checkout Code') {
             steps {
                 echo "📥 Checking out source code..."
-                git branch: 'main', url: 'https://github.com/tanmayrannavare/devsecops.git'
+                git 'https://github.com/tanmayrannavare/devsecops.git'
             }
         }
 
@@ -25,29 +25,31 @@ pipeline {
 
         stage('SAST - SonarQube Analysis') {
             steps {
-                echo "🔍 Running static analysis..."
+                echo "🔍 Running static code analysis..."
                 withSonarQubeEnv('SonarQube') {
-                    sh '''
-                        sonar-scanner \
-                            -Dsonar.projectKey=webapp \
-                            -Dsonar.sources=. \
-                            -Dsonar.host.url=$SONAR_URL \
-                            -Dsonar.login=$SONAR_TOKEN
-                    '''
+                    withEnv(["PATH+SONAR=${tool 'SonarScanner'}/bin"]) {
+                        sh '''
+                            sonar-scanner \
+                                -Dsonar.projectKey=webapp \
+                                -Dsonar.sources=. \
+                                -Dsonar.host.url=$SONAR_URL \
+                                -Dsonar.login=$SONAR_TOKEN
+                        '''
+                    }
                 }
             }
         }
 
         stage('SCA - Trivy Image Scan') {
             steps {
-                echo "🧰 Scanning image for vulnerabilities..."
+                echo "🧰 Running Trivy container scan..."
                 sh 'trivy image --exit-code 0 --severity HIGH,CRITICAL webapp:latest || true'
             }
         }
 
         stage('DAST - OWASP ZAP Scan') {
             steps {
-                echo "🧪 Running OWASP ZAP security test..."
+                echo "🧪 Running OWASP ZAP DAST scan..."
                 sh '''
                     docker run --rm --add-host=host.docker.internal:host-gateway \
                         -v $(pwd):/zap/wrk/ -t ghcr.io/zaproxy/zaproxy \
@@ -63,7 +65,7 @@ pipeline {
 
         stage('Deploy Application') {
             steps {
-                echo "🚀 Deploying application container..."
+                echo "🚀 Deploying containerized web app..."
                 sh '''
                     docker stop webapp || true
                     docker rm webapp || true
@@ -75,10 +77,10 @@ pipeline {
 
     post {
         success {
-            echo "✅ Pipeline succeeded!"
+            echo "✅ DevSecOps Pipeline executed successfully!"
         }
         failure {
-            echo "❌ Pipeline failed!"
+            echo "❌ Pipeline failed! Please check logs in Jenkins console."
         }
     }
 }
